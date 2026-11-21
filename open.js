@@ -15,7 +15,7 @@ const palette = {
   green: "#72E69A",
   pink: "#F17CCB",
   purple: "#A98BFF",
-  red: "#FF173D",
+  red: "#FF0033",
   white: "#EAF5FF"
 };
 
@@ -46,19 +46,22 @@ function rand(min, max) {
   return Math.random() * (max - min) + min;
 }
 
-// หมุนเร็วขึ้นอย่างต่อเนื่อง แล้วค่อย ๆ ชะลอ
+// Smooth rotation with continuous acceleration and deceleration
 function getEarthAngle(t) {
   if (t <= 4) {
     return 1.4 * t + 0.55 * t * t;
   }
 
   if (t <= 8) {
-    return 14.4 + (t - 4) * 5.8;
+    return 14.4 + 5.8 * (t - 4);
   }
 
   if (t <= 10) {
     const u = (t - 8) / 2;
-    const distance = 11.6 * (u - u * u + (u * u * u) / 3);
+    const distance = 11.6 * (
+      u - u * u + (u * u * u) / 3
+    );
+
     return 37.6 + distance;
   }
 
@@ -81,7 +84,7 @@ function drawStars(time) {
   ctx.restore();
 }
 
-// โลกแบบ ASCII
+// ASCII globe
 function drawEarth(angle, time, shaking, pinkMode) {
   const cx = W / 2;
   const cy = H / 2;
@@ -90,7 +93,7 @@ function drawEarth(angle, time, shaking, pinkMode) {
   const shakeX = shaking ? Math.sin(time * 48) * 4 : 0;
   const shakeY = shaking ? Math.cos(time * 55) * 4 : 0;
 
-  const resolution = 22;
+  const resolution = 23;
   const step = radius / resolution;
   const glyphs = " .:-=+*#%@";
 
@@ -120,7 +123,7 @@ function drawEarth(angle, time, shaking, pinkMode) {
 
       const land = continent > 0.45;
 
-      // สีชมพูจะคงอยู่หลังหยุดสั่นจนถึงตอนระเบิด
+      // Keep the pink ocean after shaking ends
       let color = land
         ? palette.green
         : pinkMode
@@ -131,7 +134,12 @@ function drawEarth(angle, time, shaking, pinkMode) {
         color = pinkMode ? palette.pink : palette.cyan;
       }
 
-      const light = clamp(z * 0.75 + (land ? 0.25 : 0.1), 0, 1);
+      const light = clamp(
+        z * 0.75 + (land ? 0.25 : 0.1),
+        0,
+        1
+      );
+
       const glyphIndex = Math.floor(light * (glyphs.length - 1));
       const glyph = glyphs[glyphIndex];
 
@@ -145,66 +153,67 @@ function drawEarth(angle, time, shaking, pinkMode) {
   ctx.globalAlpha = 1;
 }
 
-// ERROR แบบระบบเกมขัดข้อง
+// Bright red game-style ERROR
 function drawError(time) {
-  const flash = 0.7 + Math.abs(Math.sin(time * 24)) * 0.3;
-  const glitchX = Math.sin(time * 43) * 7;
-  const red = palette.red;
+  const flicker = 0.72 + Math.abs(Math.sin(time * 20)) * 0.28;
+  const glitchX = Math.sin(time * 38) * 6;
+  const red = "#FF0033";
 
   ctx.save();
   ctx.translate(W / 2, H / 2);
 
-  // แถบ glitch
-  for (let i = 0; i < 8; i++) {
-    const y = Math.sin(time * 13 + i * 2.1) * 65;
-    const width = rand(W * 0.25, W * 0.9);
+  // Glitch lines
+  for (let i = 0; i < 9; i++) {
+    const y = Math.sin(time * 15 + i * 2) * 65;
 
-    ctx.globalAlpha = rand(0.08, 0.24);
-    ctx.fillStyle = i % 2 ? red : palette.white;
-    ctx.fillRect(-width / 2, y, width, rand(2, 5));
+    ctx.globalAlpha =
+      0.1 + Math.abs(Math.sin(time * 18 + i)) * 0.2;
+
+    ctx.fillStyle = i % 2 ? red : "#FF657C";
+    ctx.fillRect(-W / 2, y, W, 2 + (i % 3) * 2);
   }
 
-  // กรอบเตือนสีแดง
-  ctx.globalAlpha = flash;
+  // Warning frame
+  ctx.globalAlpha = flicker;
   ctx.strokeStyle = red;
   ctx.lineWidth = 2;
   ctx.shadowColor = red;
-  ctx.shadowBlur = 24;
-  ctx.strokeRect(-132, -42, 264, 84);
+  ctx.shadowBlur = 30;
+  ctx.strokeRect(-135, -43, 270, 86);
 
-  // เส้นขีดด้านบนและล่าง
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(-132, -48);
-  ctx.lineTo(-82, -48);
-  ctx.moveTo(82, 48);
-  ctx.lineTo(132, 48);
+  ctx.moveTo(-135, -50);
+  ctx.lineTo(-105, -50);
+  ctx.moveTo(105, 50);
+  ctx.lineTo(135, 50);
   ctx.stroke();
 
-  // ตัวอักษร ERROR
-  ctx.font = "bold 38px monospace";
+  // ERROR lettering
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  ctx.font = "bold 40px monospace";
+
   ctx.fillStyle = red;
-  ctx.shadowBlur = 30;
+  ctx.shadowBlur = 35;
   ctx.fillText("ERROR", glitchX, 0);
 
-  // เงาตัวอักษร glitch
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = palette.white;
+  // Glitch duplicate
+  ctx.globalAlpha = 0.65;
+  ctx.fillStyle = "#FFFFFF";
   ctx.shadowBlur = 0;
   ctx.fillText("ERROR", glitchX - 3, 1);
 
-  ctx.globalAlpha = flash;
+  ctx.globalAlpha = flicker;
   ctx.font = "10px monospace";
-  ctx.fillStyle = palette.white;
-  ctx.fillText("SYSTEM FAILURE // 0x0000", 0, 60);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText("SYSTEM FAILURE // 0x0000", 0, 62);
 
   ctx.restore();
   ctx.globalAlpha = 1;
 }
 
-// สร้างอนุภาคระเบิด
+// Explosion particles
 function createExplosion() {
   if (explosionStarted) return;
 
@@ -213,6 +222,7 @@ function createExplosion() {
 
   const cx = W / 2;
   const cy = H / 2;
+
   const colors = [
     palette.cyan,
     palette.green,
@@ -238,7 +248,7 @@ function createExplosion() {
   }
 }
 
-// ระเบิดฟุ้งและค่อย ๆ จาง
+// Diffuse explosion with smooth fade
 function drawExplosion(time, dt) {
   if (!explosionStarted) createExplosion();
 
@@ -260,7 +270,7 @@ function drawExplosion(time, dt) {
 
     const alpha = clamp(p.life / p.maxLife, 0, 1) * fade;
 
-    // เส้นแสง
+    // Light streaks
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = p.color;
     ctx.lineWidth = p.size;
@@ -272,7 +282,7 @@ function drawExplosion(time, dt) {
     );
     ctx.stroke();
 
-    // แสงฟุ้งรอบอนุภาค
+    // Soft glow
     ctx.globalAlpha = alpha * 0.18;
     ctx.fillStyle = p.color;
     ctx.beginPath();
@@ -280,7 +290,7 @@ function drawExplosion(time, dt) {
     ctx.fill();
   }
 
-  // วงแสงที่ขยายออก
+  // Expanding rings
   for (let i = 0; i < 3; i++) {
     const duration = 0.8 + i * 0.3;
     const progress = clamp(elapsed / duration, 0, 1);
@@ -304,17 +314,18 @@ function drawExplosion(time, dt) {
   ctx.globalCompositeOperation = "source-over";
 }
 
-// โลโก้ค่อย ๆ ปรากฏและขยายจากกึ่งกลาง
+// DIVIZTY logo: centered, no tilt, smooth scale and fade
 function drawLogo(time) {
-  const progress = clamp((time - 11.9) / 3.1, 0, 1);
+  const progress = clamp((time - 11.5) / 3.5, 0, 1);
 
+  // Smooth ease-out
   const ease = 1 - Math.pow(1 - progress, 4);
-  const alpha = smoothstep(0, 0.3, progress);
-  const scale = 0.06 + ease * 0.94;
+
+  // Scale from the exact center
+  const scale = 0.04 + ease * 0.96;
+  const alpha = smoothstep(0.02, 0.5, progress);
 
   ctx.save();
-
-  // จุดกำเนิดของการขยายอยู่ตรงกลางหน้าจอ
   ctx.translate(W / 2, H / 2);
   ctx.scale(scale, scale);
   ctx.globalAlpha = alpha;
@@ -325,49 +336,53 @@ function drawLogo(time) {
   ctx.textBaseline = "middle";
   ctx.font = `bold ${fontSize}px monospace`;
 
-  // ชั้นสีชมพู
+  // Pink glow
   ctx.shadowColor = palette.pink;
-  ctx.shadowBlur = 28;
+  ctx.shadowBlur = 35;
   ctx.fillStyle = palette.pink;
   ctx.fillText("DIVIZTY", 0, 0);
 
-  // ชั้นสีฟ้า
+  // Cyan glow
   ctx.shadowColor = palette.cyan;
-  ctx.shadowBlur = 20;
+  ctx.shadowBlur = 22;
   ctx.fillStyle = palette.cyan;
   ctx.fillText("DIVIZTY", 0, -2);
 
-  // ตัวอักษรชั้นบน
+  // Main lettering
   ctx.shadowBlur = 0;
-  ctx.fillStyle = palette.white;
+  ctx.fillStyle = "#FFFFFF";
   ctx.fillText("DIVIZTY", 0, -1);
 
-  // คำโปรยค่อย ๆ ตามมา
-  const subtitleAlpha = smoothstep(0.35, 0.8, progress);
+  // Subtitle fades in later
+  const subtitleAlpha = smoothstep(0.4, 0.85, progress);
+
   ctx.globalAlpha = alpha * subtitleAlpha;
   ctx.font = `${Math.max(9, fontSize * 0.17)}px monospace`;
-  ctx.fillStyle = palette.white;
+  ctx.fillStyle = "#FFFFFF";
   ctx.fillText("WELCOME TO THE FUTURE", 0, fontSize * 0.8);
 
   ctx.restore();
   ctx.globalAlpha = 1;
 }
 
+// Main animation
 function animate(now) {
   if (!running) return;
 
   const t = (now - startTime) / 1000;
-  const dt = lastFrame ? Math.min((now - lastFrame) / 1000, 0.033) : 0;
+  const dt = lastFrame
+    ? Math.min((now - lastFrame) / 1000, 0.033)
+    : 0;
+
   lastFrame = now;
 
   ctx.clearRect(0, 0, W, H);
-
   ctx.fillStyle = "#050609";
   ctx.fillRect(0, 0, W, H);
 
   drawStars(t);
 
-  // โลก
+  // Globe
   if (t < 10) {
     const shaking = t >= 5.5 && t < 8;
     const pinkMode = t >= 5.5;
@@ -385,13 +400,13 @@ function animate(now) {
     drawError(t);
   }
 
-  // ระเบิดยังคงอยู่ระหว่างโลโก้เริ่มปรากฏ
+  // Explosion
   if (t >= 10 && t < 13.2) {
     drawExplosion(t, dt);
   }
 
-  // โลโก้ค่อย ๆ เข้ามาทับช่วงท้ายของการระเบิด
-  if (t >= 11.9) {
+  // Logo fades in while the explosion fades out
+  if (t >= 11.5) {
     drawLogo(t);
   }
 
