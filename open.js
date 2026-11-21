@@ -3,39 +3,34 @@
   "use strict";
 
   const canvas = document.getElementById("world");
+  const ctx = canvas?.getContext("2d");
+  const playButton = document.getElementById("play");
 
-  if (!canvas) {
-    console.error("DIVIZTY: ไม่พบ canvas id='world' ใน index.html");
+  if (!canvas || !ctx) {
+    console.error("DIVIZTY: Canvas unavailable");
     return;
   }
 
-  const ctx = canvas.getContext("2d");
-
-  if (!ctx) {
-    console.error("DIVIZTY: ไม่สามารถสร้าง Canvas context ได้");
-    return;
-  }
-
-  let W = 0;
-  let H = 0;
-  let DPR = 1;
-  let startTime = 0;
-  let lastFrame = 0;
-  let running = false;
-  let raf = 0;
-  let particles = [];
-  let explosionStarted = false;
-
-  const C = {
+  const COLORS = {
+    bg: "#050609",
     cyan: "#55DDF5",
-    green: "#72E69A",
+    green: "#39FF88",
     pink: "#F17CCB",
     purple: "#A98BFF",
     red: "#FF0033",
     white: "#EAF5FF"
   };
 
+  let W = 0, H = 0, DPR = 1;
+  let running = false;
+  let startTime = 0;
+  let lastFrame = 0;
+  let raf = 0;
+  let particles = [];
+  let explosionStarted = false;
+
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const mix = (a, b, t) => a + (b - a) * t;
 
   function smooth(a, b, x) {
     const v = clamp((x - a) / (b - a), 0, 1);
@@ -62,15 +57,9 @@
     return Math.random() * (b - a) + a;
   }
 
-  // Smooth rotation
   function earthAngle(t) {
-    if (t <= 4) {
-      return 1.4 * t + 0.55 * t * t;
-    }
-
-    if (t <= 8) {
-      return 14.4 + 5.8 * (t - 4);
-    }
+    if (t <= 4) return 1.4 * t + 0.55 * t * t;
+    if (t <= 8) return 14.4 + 5.8 * (t - 4);
 
     if (t <= 10) {
       const u = (t - 8) / 2;
@@ -83,18 +72,18 @@
   }
 
   function drawBackground(t) {
-    ctx.fillStyle = "#050609";
+    ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, W, H);
 
-    for (let i = 0; i < 75; i++) {
+    for (let i = 0; i < 90; i++) {
       const x = (i * 127.7) % W;
       const y = (i * 83.3) % H;
 
       ctx.globalAlpha =
-        0.25 + Math.abs(Math.sin(t * 1.2 + i)) * 0.65;
+        0.2 + Math.abs(Math.sin(t * 1.1 + i)) * 0.55;
 
-      ctx.fillStyle = C.white;
-      ctx.fillRect(x, y, 1.4, 1.4);
+      ctx.fillStyle = COLORS.white;
+      ctx.fillRect(x, y, 1.3, 1.3);
     }
 
     ctx.globalAlpha = 1;
@@ -114,6 +103,18 @@
 
     ctx.save();
     ctx.translate(cx + sx, cy + sy);
+
+    // Soft neon halo
+    const halo = ctx.createRadialGradient(0, 0, radius * 0.35, 0, 0, radius * 1.35);
+    halo.addColorStop(0, pinkMode ? "rgba(241,124,203,0.12)" : "rgba(85,221,245,0.10)");
+    halo.addColorStop(0.65, "rgba(169,139,255,0.06)");
+    halo.addColorStop(1, "rgba(5,6,9,0)");
+
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 1.35, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.font = `${step * 1.35}px monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -138,13 +139,16 @@
         const land = continent > 0.45;
 
         let color = land
-          ? C.green
-          : pinkMode
-            ? C.pink
-            : C.cyan;
+          ? (pinkMode ? COLORS.green : "#72E69A")
+          : (pinkMode ? COLORS.pink : COLORS.cyan);
 
-        if (z < 0.16) {
-          color = pinkMode ? C.pink : C.cyan;
+        if (pinkMode) {
+          const accent =
+            Math.sin(lon * 5.2 + lat * 4.3) +
+            Math.cos(lon * 3.7 - lat * 5.1);
+
+          if (z > 0.3 && accent > 1.65) color = COLORS.cyan;
+          if (z > 0.35 && accent < -1.65) color = COLORS.purple;
         }
 
         const brightness = clamp(
@@ -159,11 +163,7 @@
 
         ctx.globalAlpha = 0.45 + z * 0.55;
         ctx.fillStyle = color;
-        ctx.fillText(
-          glyphs[index],
-          x * step,
-          y * step
-        );
+        ctx.fillText(glyphs[index], x * step, y * step);
       }
     }
 
@@ -172,39 +172,35 @@
   }
 
   function drawError(t) {
-    const red = C.red;
-    const flicker = 0.72 + Math.abs(Math.sin(t * 20)) * 0.28;
+    const flicker = 0.75 + Math.abs(Math.sin(t * 20)) * 0.25;
     const offset = Math.sin(t * 38) * 6;
 
     ctx.save();
     ctx.translate(W / 2, H / 2);
 
     for (let i = 0; i < 8; i++) {
-      const y = Math.sin(t * 15 + i * 2) * 65;
-
       ctx.globalAlpha = 0.12;
-      ctx.fillStyle = i % 2 ? red : "#FF657C";
-      ctx.fillRect(-W / 2, y, W, 3);
+      ctx.fillStyle = i % 2 ? COLORS.red : "#FF657C";
+      ctx.fillRect(-W / 2, Math.sin(t * 15 + i * 2) * 65, W, 3);
     }
 
     ctx.globalAlpha = flicker;
-    ctx.strokeStyle = red;
+    ctx.strokeStyle = COLORS.red;
     ctx.lineWidth = 2;
-    ctx.shadowColor = red;
+    ctx.shadowColor = COLORS.red;
     ctx.shadowBlur = 30;
     ctx.strokeRect(-135, -43, 270, 86);
 
     ctx.font = "bold 40px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = red;
+    ctx.fillStyle = COLORS.red;
     ctx.shadowBlur = 35;
     ctx.fillText("ERROR", offset, 0);
 
     ctx.shadowBlur = 0;
-    ctx.globalAlpha = flicker;
     ctx.font = "10px monospace";
-    ctx.fillStyle = C.white;
+    ctx.fillStyle = COLORS.white;
     ctx.fillText("SYSTEM FAILURE // 0x0000", 0, 62);
 
     ctx.restore();
@@ -213,13 +209,18 @@
 
   function createExplosion() {
     if (explosionStarted) return;
-
     explosionStarted = true;
     particles = [];
 
-    const colors = [C.cyan, C.green, C.pink, C.purple, C.white];
+    const colors = [
+      COLORS.cyan,
+      COLORS.green,
+      COLORS.pink,
+      COLORS.purple,
+      COLORS.white
+    ];
 
-    for (let i = 0; i < 180; i++) {
+    for (let i = 0; i < 200; i++) {
       const a = random(0, Math.PI * 2);
       const speed = random(1.5, 7);
 
@@ -275,7 +276,7 @@
       const progress = clamp(elapsed / (0.8 + i * 0.3), 0, 1);
 
       ctx.globalAlpha = (1 - progress) * 0.4 * fade;
-      ctx.strokeStyle = [C.pink, C.cyan, C.purple][i];
+      ctx.strokeStyle = [COLORS.pink, COLORS.cyan, COLORS.purple][i];
       ctx.lineWidth = 2 + (1 - progress) * 4;
 
       ctx.beginPath();
@@ -311,24 +312,23 @@
     ctx.textBaseline = "middle";
     ctx.font = `bold ${size}px monospace`;
 
-    ctx.shadowColor = C.pink;
+    ctx.shadowColor = COLORS.pink;
     ctx.shadowBlur = 35;
-    ctx.fillStyle = C.pink;
+    ctx.fillStyle = COLORS.pink;
     ctx.fillText("DIVIZTY", 0, 0);
 
-    ctx.shadowColor = C.cyan;
+    ctx.shadowColor = COLORS.cyan;
     ctx.shadowBlur = 22;
-    ctx.fillStyle = C.cyan;
+    ctx.fillStyle = COLORS.cyan;
     ctx.fillText("DIVIZTY", 0, -2);
 
     ctx.shadowBlur = 0;
-    ctx.fillStyle = C.white;
+    ctx.fillStyle = COLORS.white;
     ctx.fillText("DIVIZTY", 0, -1);
 
-    const subAlpha = smooth(0.4, 0.85, progress);
-    ctx.globalAlpha = alpha * subAlpha;
+    ctx.globalAlpha *= smooth(0.4, 0.85, progress);
     ctx.font = `${Math.max(9, size * 0.17)}px monospace`;
-    ctx.fillStyle = C.white;
+    ctx.fillStyle = COLORS.white;
     ctx.fillText("WELCOME TO THE FUTURE", 0, size * 0.8);
 
     ctx.restore();
@@ -356,17 +356,9 @@
       );
     }
 
-    if (t >= 4 && t < 5.5) {
-      drawError(t);
-    }
-
-    if (t >= 10 && t < 13.2) {
-      drawExplosion(t, dt);
-    }
-
-    if (t >= 11.5) {
-      drawLogo(t);
-    }
+    if (t >= 4 && t < 5.5) drawError(t);
+    if (t >= 10 && t < 13.2) drawExplosion(t, dt);
+    if (t >= 11.5) drawLogo(t);
 
     if (t >= 15) {
       running = false;
@@ -378,18 +370,13 @@
 
   function startAnimation() {
     cancelAnimationFrame(raf);
-
     particles = [];
     explosionStarted = false;
     lastFrame = 0;
-
     running = true;
     startTime = performance.now();
-
     raf = requestAnimationFrame(animate);
   }
-
-  const playButton = document.getElementById("play");
 
   if (playButton) {
     playButton.addEventListener("click", () => {
@@ -397,7 +384,6 @@
       startAnimation();
     });
   } else {
-    // If there is no PLAY button, start automatically
     startAnimation();
   }
 })();
