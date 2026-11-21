@@ -1,0 +1,45 @@
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #03030a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 25px;
+}
+
+.intro-title {
+  font-size: clamp(45px, 10vw, 100px);
+  font-weight: 1000;
+  letter-spacing: 10px;
+  color: #fff;
+  text-shadow:
+    0 0 10px #ff00c8,
+    0 0 30px #00eaff;
+}
+
+#play {
+  background: transparent;
+  border: 2px solid #00eaff;
+  color: #00eaff;
+  padding: 15px 55px;
+  font: bold 20px monospace;
+  letter-spacing: 7px;
+  cursor: pointer;
+  box-shadow: 0 0 20px #00eaff55;
+  transition: .3s;
+}
+
+#play:hover {
+  background: #00eaff;
+  color: #03030a;
+  box-shadow: 0 0 40px #00eaff;
+}
+
+.intro-sub {
+  color: #888;
+  font: 11px monospace;
+  letter-spacing: 5px;
+}
