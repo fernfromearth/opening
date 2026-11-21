@@ -16,11 +16,13 @@ const palette = {
   white: "#EAF5FF"
 };
 
-const colors = [
+// สีหลักของการระเบิด
+const explosionColors = [
   palette.green,
   palette.pink,
-  palette.cyan,
-  palette.pink
+  palette.pink,
+  palette.green,
+  palette.purple
 ];
 
 const letters = "EARTH";
@@ -83,14 +85,17 @@ function globeSize() {
 
 // SMOOTH ROTATION
 function getEarthAngle(t) {
+  // เริ่มหมุนเร็วขึ้น
   if (t <= 4) {
     return 1.4 * t + .55 * t * t;
   }
 
+  // หมุนเร็วต่อเนื่อง
   if (t <= 8) {
     return 14.4 + (t - 4) * 5.8;
   }
 
+  // ค่อย ๆ ชะลอในช่วง 8–10 วินาที
   if (t <= 10) {
     const u = (t - 8) / 2;
 
@@ -101,6 +106,7 @@ function getEarthAngle(t) {
     return 37.6 + distance;
   }
 
+  // มุมสุดท้ายหลังหยุดหมุน
   return 41.4666667;
 }
 
@@ -152,10 +158,11 @@ function drawEarth(angle, time, shake = false, pinkMode = false) {
           Math.abs(Math.floor(px / step + py / step)) % 4
         ];
 
+        // หลังเริ่มสั่นให้พื้นโลกเป็นสีชมพูตลอด
         color = pinkMode ? palette.pink : palette.cyan;
       }
 
-      // สีขอบโลกเหมือนกันตลอดช่วง pinkMode
+      // ขอบโลกใช้สีชมพูในช่วงสั่นและหลังสั่น
       if (z < .2) {
         char = "*";
         color = pinkMode ? palette.pink : palette.cyan;
@@ -175,20 +182,24 @@ function drawEarth(angle, time, shake = false, pinkMode = false) {
   ctx.restore();
 }
 
-// EXPLOSION PARTICLES
+// CREATE EXPLOSION
 function createExplosion() {
   particles = [];
 
-  for (let i = 0; i < 135; i++) {
+  // อนุภาคกระจายฟุ้ง
+  for (let i = 0; i < 190; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 1.2 + Math.random() * 3.2;
+    const speed = 1.1 + Math.random() * 4.8;
 
     particles.push({
       vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed * .8,
-      length: 12 + Math.random() * 28,
-      color: colors[i % colors.length],
-      alpha: .7 + Math.random() * .3
+      vy: Math.sin(angle) * speed,
+      length: 12 + Math.random() * 48,
+      size: 1 + Math.random() * 1.8,
+      color: explosionColors[
+        Math.floor(Math.random() * explosionColors.length)
+      ],
+      alpha: .55 + Math.random() * .45
     });
   }
 }
@@ -203,8 +214,28 @@ function drawExplosion(time) {
   ctx.globalCompositeOperation = "lighter";
   ctx.lineCap = "round";
 
+  // แสงระเบิดตรงกลาง
+  const coreRadius = 12 + age * 90;
+
+  const gradient = ctx.createRadialGradient(
+    cx, cy, 0,
+    cx, cy, coreRadius
+  );
+
+  gradient.addColorStop(0, "rgba(241,124,203,0.55)");
+  gradient.addColorStop(.35, "rgba(114,230,154,0.22)");
+  gradient.addColorStop(1, "rgba(241,124,203,0)");
+
+  ctx.globalAlpha = Math.max(0, 1 - age / 1.2);
+  ctx.fillStyle = gradient;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // เส้นแสงพุ่งออกทุกทิศทาง
   for (const p of particles) {
-    const distance = age * 85;
+    const distance = age * (65 + p.length * 1.5);
 
     const x = cx + p.vx * distance;
     const y = cy + p.vy * distance;
@@ -213,8 +244,8 @@ function drawExplosion(time) {
     const tailY = y - p.vy * p.length;
 
     if (
-      x < -100 || x > W + 100 ||
-      y < -100 || y > H + 100
+      x < -150 || x > W + 150 ||
+      y < -150 || y > H + 150
     ) continue;
 
     ctx.globalAlpha = Math.max(
@@ -223,7 +254,7 @@ function drawExplosion(time) {
     );
 
     ctx.strokeStyle = p.color;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = p.size;
 
     ctx.beginPath();
     ctx.moveTo(tailX, tailY);
@@ -231,16 +262,20 @@ function drawExplosion(time) {
     ctx.stroke();
   }
 
-  // EXPANDING RINGS
-  for (let i = 0; i < 2; i++) {
-    const r = globeSize() + age * (100 + i * 55);
+  // วงแหวนกระจายออก
+  for (let i = 0; i < 4; i++) {
+    const r = globeSize() * .25 +
+      age * (100 + i * 65);
 
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
 
-    ctx.strokeStyle = i === 0 ? palette.green : palette.pink;
-    ctx.lineWidth = 1.2;
-    ctx.globalAlpha = Math.max(0, .55 - age / 3);
+    ctx.strokeStyle = i % 2 === 0
+      ? palette.green
+      : palette.pink;
+
+    ctx.lineWidth = 1.2 + (i % 2) * .5;
+    ctx.globalAlpha = Math.max(0, .55 - age / 2.8);
 
     ctx.stroke();
   }
@@ -252,13 +287,19 @@ function drawExplosion(time) {
 function drawLogo(time) {
   const word = "DIVIZTY";
   const elapsed = time - 12.5;
-  const progress = Math.min(1, elapsed / .65);
 
-  const rotation = elapsed < 1.5
-    ? (1 - Math.pow(1 - elapsed / 1.5, 2)) * .18
-    : .18;
+  // ค่อย ๆ ปรากฏ
+  const progress = Math.min(1, elapsed / 1.1);
 
-  const size = Math.min(W * .105, 82);
+  // ขยายจากเล็กไปใหญ่แบบนุ่มนวล
+  const ease = 1 - Math.pow(1 - progress, 3);
+  const scale = .12 + ease * .88;
+
+  // หมุนเล็กน้อยระหว่างปรากฏ
+  const rotation = (1 - ease) * -.12;
+
+  const baseSize = Math.min(W * .105, 82);
+  const size = baseSize * scale;
   const spacing = size * .83;
 
   const logoColors = [
@@ -269,6 +310,7 @@ function drawLogo(time) {
   ];
 
   ctx.save();
+
   ctx.translate(W / 2, H / 2);
   ctx.rotate(rotation);
 
@@ -280,17 +322,25 @@ function drawLogo(time) {
     for (let i = 0; i < word.length; i++) {
       const x = startX + i * spacing;
       const color = logoColors[i % logoColors.length];
-      const offset = layer * 2;
+      const offset = layer * 2 * scale;
 
-      ctx.globalAlpha = progress * (layer === 1 ? 1 : .28);
+      ctx.globalAlpha = progress * (
+        layer === 1 ? 1 : .28
+      );
+
       ctx.font = `700 ${size}px monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+
       ctx.fillStyle = color;
       ctx.shadowColor = color;
-      ctx.shadowBlur = layer === 1 ? 25 : 9;
+      ctx.shadowBlur = (layer === 1 ? 25 : 9) * scale;
 
-      ctx.fillText(word[i], x + offset, offset);
+      ctx.fillText(
+        word[i],
+        x + offset,
+        offset
+      );
     }
   }
 
@@ -305,25 +355,32 @@ function drawLogo(time) {
     ctx.textBaseline = "middle";
 
     ctx.shadowColor = color;
-    ctx.shadowBlur = 28;
+    ctx.shadowBlur = 28 * scale;
     ctx.fillStyle = "#FFFFFF";
+
     ctx.fillText(word[i], x, 0);
 
     ctx.shadowBlur = 0;
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 * scale;
+
     ctx.strokeText(word[i], x, 0);
   }
 
   // SUBTITLE
   ctx.globalAlpha = progress;
+
   ctx.font = `700 ${Math.max(9, size * .16)}px monospace`;
   ctx.fillStyle = palette.pink;
   ctx.textAlign = "center";
   ctx.shadowColor = palette.pink;
-  ctx.shadowBlur = 15;
+  ctx.shadowBlur = 15 * scale;
 
-  ctx.fillText("WELCOME TO THE FUTURE", 0, size * .85);
+  ctx.fillText(
+    "WELCOME TO THE FUTURE",
+    0,
+    size * .85
+  );
 
   ctx.restore();
 }
@@ -340,6 +397,7 @@ function drawError(time) {
   ctx.font = `700 ${size}px monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+
   ctx.fillStyle = palette.red;
   ctx.shadowColor = palette.red;
   ctx.shadowBlur = 22;
@@ -359,14 +417,14 @@ function animate(now) {
 
   drawStars(t);
 
+  // EARTH
   if (t < 12.5) {
     const angle = getEarthAngle(t);
 
-    // สั่นเฉพาะช่วง 5.5–8 วินาที
+    // สั่นเฉพาะ 5.5–8 วินาที
     const shaking = t >= 5.5 && t < 8;
 
-    // เปลี่ยนเป็นสีเขียว + ชมพูตั้งแต่ 5.5 วินาที
-    // และคงสีนี้ไว้จนถึงก่อนระเบิด
+    // สีชมพูเริ่มตอนสั่น และคงอยู่หลังสั่นจนถึงระเบิด
     const pinkMode = t >= 5.5;
 
     drawEarth(angle, t, shaking, pinkMode);
@@ -382,9 +440,10 @@ function animate(now) {
     drawExplosion(t);
   }
 
-  // LOGO
+  // DIVIZTY
   if (t >= 12.5 && t < 15) {
     ctx.clearRect(0, 0, W, H);
+    drawStars(t);
     drawLogo(t);
   }
 
