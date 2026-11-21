@@ -1,7 +1,494 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DIVIZTY — ASCII EXPERIENCE</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #03030a;
+  font-family: monospace;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: radial-gradient(circle, #17102b, #03030a 75%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 25px;
+}
+
+.intro-title {
+  font-size: clamp(45px, 10vw, 100px);
+  font-weight: 1000;
+  letter-spacing: 10px;
+  background: linear-gradient(90deg, #ff00c8, #b6ff00, #00eaff, #a855ff);
+  background-size: 300%;
+  color: transparent;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: gradient 3s linear infinite;
+  filter: drop-shadow(0 0 20px #ff00c8);
+}
+
+@keyframes gradient {
+  to { background-position: 300%; }
+}
+
+#play {
+  background: transparent;
+  border: 2px solid #00eaff;
+  color: #00eaff;
+  padding: 15px 55px;
+  font: bold 20px monospace;
+  letter-spacing: 7px;
+  cursor: pointer;
+  box-shadow: 0 0 20px #00eaff55;
+  transition: .3s;
+}
+
+#play:hover {
+  background: #00eaff;
+  color: #03030a;
+  box-shadow: 0 0 40px #00eaff;
+  transform: scale(1.08);
+}
+
+.intro-sub {
+  color: #888;
+  font-size: 11px;
+  letter-spacing: 5px;
+}
+
+#replay {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #777;
+  font-size: 11px;
+  letter-spacing: 3px;
+  z-index: 5;
+  cursor: pointer;
+  display: none;
+}
+
+</style>
+</head>
+
+<body>
+
 <div id="intro">
   <div class="intro-title">DIVIZTY</div>
-  <button id="play">PLAY <span>→</span></button>
+  <button id="play">PLAY →</button>
   <div class="intro-sub">WELCOME TO THE FUTURE</div>
 </div>
 
 <canvas id="world"></canvas>
+
+<div id="replay">CLICK TO REPLAY</div>
+
+<script>
+const canvas = document.getElementById("world");
+const ctx = canvas.getContext("2d");
+
+const W = 100;
+const H = 48;
+
+const ramp = " .,:-=+*#%@";
+
+const neon = [
+  "#ff00c8",
+  "#b6ff00",
+  "#00eaff",
+  "#a855ff",
+  "#ff6a00",
+  "#ffffff"
+];
+
+const patterns = {
+  D: ["11110","10001","10001","10001","10001","10001","11110"],
+  I: ["11111","00100","00100","00100","00100","00100","11111"],
+  V: ["10001","10001","10001","10001","01010","01010","00100"],
+  Z: ["11111","00001","00010","00100","01000","10000","11111"],
+  T: ["11111","00100","00100","00100","00100","00100","00100"],
+  Y: ["10001","10001","01010","00100","00100","00100","00100"]
+};
+
+let start = null;
+let rays = [];
+let animationId = null;
+let playing = false;
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+}
+
+addEventListener("resize", resize);
+resize();
+
+function random(a, b) {
+  return a + Math.random() * (b - a);
+}
+
+function land(lon, lat) {
+  const v =
+    Math.sin(lon * 2.1 + lat * 2.7) +
+    Math.cos(lon * 3.8 - lat * 2.1) +
+    Math.sin(lon * 5.2 + lat * 4.1) +
+    Math.cos(lon * 1.6 - lat * 5.2);
+
+  return v > 0.55;
+}
+
+function makeRays() {
+  rays = [];
+
+  for (let i = 0; i < 190; i++) {
+    const a = Math.random() * Math.PI * 2;
+
+    rays.push({
+      angle: a,
+      speed: random(40, 190),
+      length: random(15, 100),
+      offset: random(0, 30),
+      color: neon[Math.floor(Math.random() * neon.length)]
+    });
+  }
+}
+
+function drawStars() {
+  for (let i = 0; i < 110; i++) {
+    const x = (i * 173 + 43) % canvas.width;
+    const y = (i * 97 + 29) % canvas.height;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.globalAlpha = .25 + Math.abs(Math.sin(i)) * .55;
+    ctx.fillRect(x, y, 2, 2);
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+function drawEarth(t, mode, shake) {
+  const cw = canvas.width / W;
+  const ch = canvas.height / H;
+
+  const radius = Math.min(canvas.width * .34, canvas.height * .39);
+  const rx = radius;
+  const ry = radius * .52;
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  let rotation;
+
+  if (t < 4) {
+    rotation = t * t * 1.15;
+  } else if (t < 8) {
+    rotation = 18 + (t - 4) * 5;
+  } else {
+    rotation = 38 + (t - 8) * 3;
+  }
+
+  const sx = shake ? random(-7, 7) : 0;
+  const sy = shake ? random(-5, 5) : 0;
+
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const px = x * cw + cw / 2;
+      const py = y * ch + ch / 2;
+
+      const nx = (px - cx) / rx;
+      const ny = (py - cy) / ry;
+
+      const d = nx * nx + ny * ny;
+
+      if (d > 1) continue;
+
+      const z = Math.sqrt(1 - d);
+      const lon = Math.atan2(nx, z) + rotation;
+      const lat = Math.asin(-ny);
+
+      const isLand = land(lon, lat);
+
+      let char;
+      let color;
+
+      if (isLand) {
+        const detail = Math.abs(
+          Math.sin(lon * 12 + lat * 9) *
+          Math.cos(lat * 15)
+        );
+
+        char = ramp[Math.floor(detail * (ramp.length - 1))];
+        color = "#65d96a";
+      } else {
+        char = ramp[1 + Math.floor(z * 3)];
+        color = "#32a9ee";
+      }
+
+      if (mode === "neon") {
+        color = neon[
+          Math.floor((x * 3 + y + t * 25) % neon.length)
+        ];
+
+        char = ramp[Math.floor(random(3, ramp.length))];
+      }
+
+      if (mode === "disco") {
+        color = neon[
+          Math.floor((x + y + t * 35) % neon.length)
+        ];
+
+        char = ["@", "#", "*", "+", "X", "S"][
+          Math.floor((x + y + t * 10) % 6)
+        ];
+      }
+
+      if (z < .14) {
+        color = mode === "normal" ? "#b8f6ff" : "#ff43dc";
+        char = "*";
+      }
+
+      ctx.fillStyle = color;
+      ctx.font = `bold ${Math.max(7, cw * 1.25)}px monospace`;
+      ctx.fillText(char, px, py);
+    }
+  }
+
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = mode === "normal" ? "#258bff" : "#ff00d9";
+  ctx.globalAlpha = mode === "normal" ? .2 : .7;
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = 25;
+  ctx.shadowColor = ctx.strokeStyle;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx + 4, ry + 4, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawError() {
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${Math.min(canvas.width * .105, 110)}px monospace`;
+  ctx.fillStyle = "#ff174d";
+  ctx.shadowColor = "#ff003c";
+  ctx.shadowBlur = 25;
+
+  const glitch = Math.random() > .5 ? random(-5, 5) : 0;
+
+  ctx.fillText(
+    "ERROR",
+    canvas.width / 2 + glitch,
+    canvas.height * .22
+  );
+
+  ctx.restore();
+}
+
+function drawRays(t) {
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const radius = Math.min(canvas.width * .34, canvas.height * .39);
+
+  ctx.save();
+  ctx.lineWidth = 2;
+
+  rays.forEach(ray => {
+    const distance = radius + ray.offset + (t - 10) * ray.speed;
+
+    const x1 = cx + Math.cos(ray.angle) * distance;
+    const y1 = cy + Math.sin(ray.angle) * distance * .52;
+
+    const x2 = x1 + Math.cos(ray.angle) * ray.length;
+    const y2 = y1 + Math.sin(ray.angle) * ray.length * .52;
+
+    ctx.strokeStyle = ray.color;
+    ctx.globalAlpha = Math.max(0, 1 - (t - 10) / 3);
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = ray.color;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+function drawAsciiLogo(t) {
+  const letters = ["D","I","V","I","Z","T","Y"];
+
+  const cell = Math.min(canvas.width / 90, canvas.height / 36);
+  const gap = cell * 1.2;
+  const letterWidth = 5 * cell;
+
+  const totalWidth =
+    letters.length * letterWidth +
+    (letters.length - 1) * gap;
+
+  const elapsed = t - 12.5;
+
+  const rotation =
+    (1 - Math.exp(-elapsed * 2.1)) * Math.PI * 2;
+
+  const scale = Math.min(1, elapsed * 2);
+
+  ctx.save();
+
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(rotation);
+  ctx.scale(scale, scale);
+
+  const startX = -totalWidth / 2;
+  const startY = -3.5 * cell;
+
+  letters.forEach((letter, index) => {
+    const pattern = patterns[letter];
+
+    pattern.forEach((line, row) => {
+      for (let col = 0; col < line.length; col++) {
+        if (line[col] !== "1") continue;
+
+        const hue =
+          (index * 55 + row * 20 + t * 100) % 360;
+
+        ctx.fillStyle = `hsl(${hue}, 100%, 65%)`;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = 15;
+
+        ctx.font = `bold ${cell * 1.25}px monospace`;
+
+        ctx.fillText(
+          "#",
+          startX + index * (letterWidth + gap) + col * cell,
+          startY + row * cell
+        );
+      }
+    });
+  });
+
+  ctx.restore();
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.font = `bold ${Math.max(10, cell * 1.2)}px monospace`;
+  ctx.fillStyle = "#ffffff";
+  ctx.shadowColor = "#ff00cc";
+  ctx.shadowBlur = 20;
+
+  ctx.fillText(
+    "WELCOME TO THE FUTURE",
+    canvas.width / 2,
+    canvas.height * .72
+  );
+
+  ctx.restore();
+}
+
+function animate(now) {
+  if (!playing) return;
+
+  if (start === null) start = now;
+
+  const t = (now - start) / 1000;
+
+  ctx.setTransform(
+    canvas.width / 100,
+    0,
+    0,
+    canvas.height / 48,
+    0,
+    0
+  );
+
+  ctx.fillStyle = "#03030a";
+  ctx.fillRect(0, 0, 100, 48);
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  drawStars();
+
+  const mode =
+    t >= 8 && t < 10 ? "disco" :
+    t >= 4 && t < 8 ? "neon" :
+    "normal";
+
+  drawEarth(
+    t,
+    mode,
+    t >= 5.5 && t < 8
+  );
+
+  if (t >= 4 && t < 5.5) {
+    drawError();
+  }
+
+  if (t >= 10 && t < 15) {
+    drawRays(t);
+  }
+
+  if (t >= 12.5) {
+    drawAsciiLogo(t);
+  }
+
+  if (t < 15) {
+    animationId = requestAnimationFrame(animate);
+  } else {
+    playing = false;
+    document.getElementById("replay").style.display = "block";
+  }
+}
+
+function replay() {
+  if (animationId) cancelAnimationFrame(animationId);
+
+  start = null;
+  playing = true;
+
+  makeRays();
+
+  document.getElementById("replay").style.display = "none";
+
+  animationId = requestAnimationFrame(animate);
+}
+
+document.getElementById("play").addEventListener("click", () => {
+  document.getElementById("intro").style.display = "none";
+  replay();
+});
+
+document.getElementById("replay").addEventListener("click", replay);
+
+</script>
+</body>
+</html>
