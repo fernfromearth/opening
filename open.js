@@ -27,7 +27,7 @@ const letters = "EARTH";
 let stars = [];
 let particles = [];
 
-// CANVAS RESIZE
+// CANVAS
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -47,12 +47,11 @@ window.addEventListener("resize", resize);
 function makeStars() {
   stars = [];
 
-  for (let i = 0; i < 110; i++) {
+  for (let i = 0; i < 90; i++) {
     stars.push({
       x: Math.random() * W,
       y: Math.random() * H,
-      alpha: Math.random(),
-      size: Math.random() * 2
+      alpha: Math.random()
     });
   }
 }
@@ -62,11 +61,10 @@ makeStars();
 function drawStars(time) {
   ctx.save();
   ctx.font = "10px monospace";
+  ctx.fillStyle = palette.white;
 
   for (const star of stars) {
     ctx.globalAlpha = .25 + star.alpha * .45;
-    ctx.fillStyle = palette.white;
-
     ctx.fillText(
       ".",
       star.x,
@@ -82,8 +80,35 @@ function globeSize() {
   return Math.min(145, W * .18, H * .27);
 }
 
+// SMOOTH ROTATION
+function getEarthAngle(t) {
+  // เริ่มหมุนเร็วขึ้น
+  if (t <= 4) {
+    return 1.4 * t + .55 * t * t;
+  }
+
+  // หมุนต่อด้วยความเร็วคงที่
+  if (t <= 8) {
+    return 14.4 + (t - 4) * 5.8;
+  }
+
+  // ค่อย ๆ ชะลอความเร็วในช่วง 8–10 วินาที
+  if (t <= 10) {
+    const u = (t - 8) / 2;
+
+    const distance = 11.6 * (
+      u - u * u + (u * u * u) / 3
+    );
+
+    return 37.6 + distance;
+  }
+
+  // หยุดสนิทหลังจากชะลอเสร็จ
+  return 45.333333;
+}
+
 // ASCII EARTH
-function drawEarth(angle, time, shake = false, disco = false) {
+function drawEarth(angle, time, shake = false) {
   const radius = globeSize();
   const cx = W / 2;
   const cy = H / 2;
@@ -98,7 +123,6 @@ function drawEarth(angle, time, shake = false, disco = false) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  // PERFECT CIRCULAR SPHERE
   for (let py = -radius; py <= radius; py += step) {
     for (let px = -radius; px <= radius; px += step) {
       const nx = px / radius;
@@ -132,18 +156,9 @@ function drawEarth(angle, time, shake = false, disco = false) {
         color = palette.cyan;
       }
 
-      if (disco) {
-        const band = Math.floor((px + radius) / step);
-
-        const index = Math.abs(
-          band +
-          Math.floor(time * 5) +
-          Math.floor((py + radius) / step) * 2
-        ) % colors.length;
-
-        color = colors[index];
-      } else if (shake) {
-        color = land > .65 ? palette.green : palette.pink;
+      // คงสีเดิม ไม่เปลี่ยนเป็น Disco
+      if (shake && land <= .65) {
+        color = palette.pink;
       }
 
       if (z < .2) {
@@ -165,69 +180,66 @@ function drawEarth(angle, time, shake = false, disco = false) {
 function createExplosion() {
   particles = [];
 
-  for (let a = 0; a < 360; a += 1.5) {
-    const rad = a * Math.PI / 180;
-    const speed = 1.2 + Math.random() * 3.5;
+  // ลดจำนวนอนุภาคเพื่อให้ทำงานลื่นขึ้น
+  for (let i = 0; i < 135; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.2 + Math.random() * 3.2;
 
     particles.push({
-      vx: Math.cos(rad) * speed,
-      vy: Math.sin(rad) * speed * .75,
-      char: ["╱", "╲", "│", "─", "✦", "*"][
-        Math.floor(Math.random() * 6)
-      ],
-      color: colors[Math.floor(Math.random() * colors.length)],
-      size: 10 + Math.random() * 7
-    });
-  }
-
-  for (let i = 0; i < 90; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const speed = 1.5 + Math.random() * 4;
-
-    particles.push({
-      vx: Math.cos(a) * speed,
-      vy: Math.sin(a) * speed,
-      char: Math.random() > .5 ? "/" : "\\",
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed * .8,
+      length: 12 + Math.random() * 28,
       color: colors[i % colors.length],
-      size: 9 + Math.random() * 12
+      alpha: .7 + Math.random() * .3
     });
   }
 }
 
+// EXPLOSION
 function drawExplosion(time) {
   const age = time - 10;
-  const radius = globeSize();
+  const cx = W / 2;
+  const cy = H / 2;
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
 
+  // วาดเส้นแสงแทนการใช้ shadow หนัก ๆ
   for (const p of particles) {
     const distance = age * 85;
-    const x = W / 2 + p.vx * distance;
-    const y = H / 2 + p.vy * distance;
 
-    if (x < -50 || x > W + 50 || y < -50 || y > H + 50) {
-      continue;
-    }
+    const x = cx + p.vx * distance;
+    const y = cy + p.vy * distance;
 
-    ctx.globalAlpha = Math.max(0, 1 - age / 2.5);
-    ctx.fillStyle = p.color;
-    ctx.shadowColor = p.color;
-    ctx.shadowBlur = 16;
-    ctx.font = `${p.size}px monospace`;
+    const tailX = x - p.vx * p.length;
+    const tailY = y - p.vy * p.length;
 
-    ctx.fillText(p.char, x, y);
-  }
+    if (
+      x < -100 || x > W + 100 ||
+      y < -100 || y > H + 100
+    ) continue;
 
-  // EXPANDING RINGS
-  for (let i = 0; i < 3; i++) {
-    const r = radius + age * (100 + i * 45);
+    ctx.globalAlpha = Math.max(0, (1 - age / 2.5) * p.alpha);
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = 1.5;
 
     ctx.beginPath();
-    ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2);
-    ctx.strokeStyle = colors[i % colors.length];
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = Math.max(0, .65 - age / 3);
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+
+  // Expanding rings
+  for (let i = 0; i < 2; i++) {
+    const r = globeSize() + age * (100 + i * 55);
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+
+    ctx.strokeStyle = colors[i];
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = Math.max(0, .55 - age / 3);
     ctx.stroke();
   }
 
@@ -261,7 +273,7 @@ function drawLogo(time) {
   const totalWidth = spacing * (word.length - 1);
   const startX = -totalWidth / 2;
 
-  // LAYERED LETTER EFFECT
+  // Layered letters
   for (let layer = 9; layer >= 1; layer--) {
     for (let i = 0; i < word.length; i++) {
       const x = startX + i * spacing;
@@ -280,7 +292,7 @@ function drawLogo(time) {
     }
   }
 
-  // MAIN LETTERS
+  // Main logo
   for (let i = 0; i < word.length; i++) {
     const x = startX + i * spacing;
     const color = logoColors[i % logoColors.length];
@@ -301,7 +313,7 @@ function drawLogo(time) {
     ctx.strokeText(word[i], x, 0);
   }
 
-  // SUBTITLE
+  // Subtitle
   ctx.globalAlpha = progress;
   ctx.font = `700 ${Math.max(9, size * .16)}px monospace`;
   ctx.fillStyle = palette.pink;
@@ -314,7 +326,7 @@ function drawLogo(time) {
   ctx.restore();
 }
 
-// ERROR TEXT
+// ERROR
 function drawError(time) {
   const size = Math.min(64, W * .09);
   const pulse = 1 + Math.sin(time * 12) * .035;
@@ -335,30 +347,21 @@ function drawError(time) {
   ctx.restore();
 }
 
-// ANIMATION TIMELINE
+// MAIN ANIMATION
 function animate(now) {
   if (!running) return;
 
   const t = (now - startTime) / 1000;
 
   ctx.clearRect(0, 0, W, H);
+
   drawStars(t);
 
   if (t < 12.5) {
-    let angle;
-
-    if (t < 4) {
-      angle = t * 1.4 + t * t * .55;
-    } else if (t < 8) {
-      angle = 5.6 + (t - 4) * 3;
-    } else {
-      angle = 17.6 + (t - 8) * 3.5;
-    }
-
+    const angle = getEarthAngle(t);
     const shaking = t >= 5.5 && t < 8;
-    const disco = t >= 8 && t < 12.5;
 
-    drawEarth(angle, t, shaking, disco);
+    drawEarth(angle, t, shaking);
   }
 
   if (t >= 4 && t < 5.5) {
