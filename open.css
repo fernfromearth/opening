@@ -1,51 +1,58 @@
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html,
 body {
   width: 100%;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
-  background: #050510;
-  font-family: Arial, sans-serif;
+  background: #050609;
+  font-family: "Space Mono", monospace;
 }
 
-#scene {
+#world {
   position: fixed;
   inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
+  background: #050609;
 }
 
 #start {
   position: fixed;
   inset: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: #050510;
-  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: #050609;
+  z-index: 5;
+  transition: opacity .7s ease;
+}
+
+#start.hide {
+  opacity: 0;
+  pointer-events: none;
 }
 
 #play {
-  padding: 15px 48px;
-  border: 1px solid #55ddf5;
-  border-radius: 50px;
+  color: white;
   background: transparent;
-  color: #55ddf5;
-  font-size: 18px;
+  border: 1px solid #777;
+  padding: 13px 38px;
+  font-family: inherit;
+  font-size: 14px;
   letter-spacing: 5px;
   cursor: pointer;
-  box-shadow: 0 0 20px #55ddf555;
-  transition: 0.3s;
+  transition: .3s ease;
 }
 
 #play:hover {
-  background: #55ddf5;
-  color: #050510;
-  box-shadow: 0 0 35px #55ddf5;
-  transform: scale(1.08);
+  background: white;
+  color: #050609;
+  letter-spacing: 8px;
+  box-shadow: 0 0 25px #ffffff55;
 }
