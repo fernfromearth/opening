@@ -11,7 +11,7 @@
     return;
   }
 
-  const COLORS = {
+  const C = {
     bg: "#050609",
     cyan: "#55DDF5",
     green: "#39FF88",
@@ -21,7 +21,9 @@
     white: "#EAF5FF"
   };
 
-  let W = 0, H = 0, DPR = 1;
+  let W = 0;
+  let H = 0;
+  let DPR = 1;
   let running = false;
   let startTime = 0;
   let lastFrame = 0;
@@ -57,9 +59,15 @@
     return Math.random() * (b - a) + a;
   }
 
+  // Rotation gradually accelerates, then slows down smoothly.
   function earthAngle(t) {
-    if (t <= 4) return 1.4 * t + 0.55 * t * t;
-    if (t <= 8) return 14.4 + 5.8 * (t - 4);
+    if (t <= 4) {
+      return 1.4 * t + 0.55 * t * t;
+    }
+
+    if (t <= 8) {
+      return 14.4 + 5.8 * (t - 4);
+    }
 
     if (t <= 10) {
       const u = (t - 8) / 2;
@@ -72,7 +80,7 @@
   }
 
   function drawBackground(t) {
-    ctx.fillStyle = COLORS.bg;
+    ctx.fillStyle = C.bg;
     ctx.fillRect(0, 0, W, H);
 
     for (let i = 0; i < 90; i++) {
@@ -82,7 +90,7 @@
       ctx.globalAlpha =
         0.2 + Math.abs(Math.sin(t * 1.1 + i)) * 0.55;
 
-      ctx.fillStyle = COLORS.white;
+      ctx.fillStyle = C.white;
       ctx.fillRect(x, y, 1.3, 1.3);
     }
 
@@ -90,24 +98,38 @@
   }
 
   function drawEarth(angle, t, shaking, pinkMode) {
-    const radius = Math.max(40, Math.min(145, W * 0.18, H * 0.27));
-    const cx = W / 2;
-    const cy = H / 2;
+    const radius = Math.max(
+      40,
+      Math.min(145, W * 0.18, H * 0.27)
+    );
 
-    const sx = shaking ? Math.sin(t * 48) * 4 : 0;
-    const sy = shaking ? Math.cos(t * 55) * 4 : 0;
+    const shakeStrength = shaking ? 1 : 0;
+    const sx = Math.sin(t * 48) * 4 * shakeStrength;
+    const sy = Math.cos(t * 55) * 4 * shakeStrength;
+
+    const cx = W / 2 + sx;
+    const cy = H / 2 + sy;
 
     const resolution = 23;
     const step = radius / resolution;
     const glyphs = " .:-=+*#%@";
 
     ctx.save();
-    ctx.translate(cx + sx, cy + sy);
+    ctx.translate(cx, cy);
 
-    // Soft neon halo
-    const halo = ctx.createRadialGradient(0, 0, radius * 0.35, 0, 0, radius * 1.35);
-    halo.addColorStop(0, pinkMode ? "rgba(241,124,203,0.12)" : "rgba(85,221,245,0.10)");
-    halo.addColorStop(0.65, "rgba(169,139,255,0.06)");
+    // Neon atmospheric halo
+    const halo = ctx.createRadialGradient(
+      0, 0, radius * 0.35,
+      0, 0, radius * 1.35
+    );
+
+    halo.addColorStop(
+      0,
+      pinkMode
+        ? "rgba(241,124,203,0.16)"
+        : "rgba(85,221,245,0.10)"
+    );
+    halo.addColorStop(0.65, "rgba(169,139,255,0.07)");
     halo.addColorStop(1, "rgba(5,6,9,0)");
 
     ctx.fillStyle = halo;
@@ -139,16 +161,16 @@
         const land = continent > 0.45;
 
         let color = land
-          ? (pinkMode ? COLORS.green : "#72E69A")
-          : (pinkMode ? COLORS.pink : COLORS.cyan);
+          ? (pinkMode ? C.green : "#72E69A")
+          : (pinkMode ? C.pink : C.cyan);
 
         if (pinkMode) {
           const accent =
             Math.sin(lon * 5.2 + lat * 4.3) +
             Math.cos(lon * 3.7 - lat * 5.1);
 
-          if (z > 0.3 && accent > 1.65) color = COLORS.cyan;
-          if (z > 0.35 && accent < -1.65) color = COLORS.purple;
+          if (z > 0.3 && accent > 1.65) color = C.cyan;
+          if (z > 0.35 && accent < -1.65) color = C.purple;
         }
 
         const brightness = clamp(
@@ -163,7 +185,11 @@
 
         ctx.globalAlpha = 0.45 + z * 0.55;
         ctx.fillStyle = color;
-        ctx.fillText(glyphs[index], x * step, y * step);
+        ctx.fillText(
+          glyphs[index],
+          x * step,
+          y * step
+        );
       }
     }
 
@@ -172,7 +198,9 @@
   }
 
   function drawError(t) {
-    const flicker = 0.75 + Math.abs(Math.sin(t * 20)) * 0.25;
+    const flicker =
+      0.75 + Math.abs(Math.sin(t * 20)) * 0.25;
+
     const offset = Math.sin(t * 38) * 6;
 
     ctx.save();
@@ -180,27 +208,32 @@
 
     for (let i = 0; i < 8; i++) {
       ctx.globalAlpha = 0.12;
-      ctx.fillStyle = i % 2 ? COLORS.red : "#FF657C";
-      ctx.fillRect(-W / 2, Math.sin(t * 15 + i * 2) * 65, W, 3);
+      ctx.fillStyle = i % 2 ? C.red : "#FF657C";
+      ctx.fillRect(
+        -W / 2,
+        Math.sin(t * 15 + i * 2) * 65,
+        W,
+        3
+      );
     }
 
     ctx.globalAlpha = flicker;
-    ctx.strokeStyle = COLORS.red;
+    ctx.strokeStyle = C.red;
     ctx.lineWidth = 2;
-    ctx.shadowColor = COLORS.red;
+    ctx.shadowColor = C.red;
     ctx.shadowBlur = 30;
     ctx.strokeRect(-135, -43, 270, 86);
 
     ctx.font = "bold 40px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = COLORS.red;
+    ctx.fillStyle = C.red;
     ctx.shadowBlur = 35;
     ctx.fillText("ERROR", offset, 0);
 
     ctx.shadowBlur = 0;
     ctx.font = "10px monospace";
-    ctx.fillStyle = COLORS.white;
+    ctx.fillStyle = C.white;
     ctx.fillText("SYSTEM FAILURE // 0x0000", 0, 62);
 
     ctx.restore();
@@ -209,15 +242,16 @@
 
   function createExplosion() {
     if (explosionStarted) return;
+
     explosionStarted = true;
     particles = [];
 
     const colors = [
-      COLORS.cyan,
-      COLORS.green,
-      COLORS.pink,
-      COLORS.purple,
-      COLORS.white
+      C.cyan,
+      C.green,
+      C.pink,
+      C.purple,
+      C.white
     ];
 
     for (let i = 0; i < 200; i++) {
@@ -246,6 +280,24 @@
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
 
+    // Central flash that fades into the streaks.
+    const flash = 1 - smooth(0, 0.65, elapsed);
+
+    if (flash > 0) {
+      const glow = ctx.createRadialGradient(
+        W / 2, H / 2, 0,
+        W / 2, H / 2, 180
+      );
+
+      glow.addColorStop(0, `rgba(255,255,255,${flash * 0.9})`);
+      glow.addColorStop(0.25, `rgba(241,124,203,${flash * 0.55})`);
+      glow.addColorStop(1, "rgba(169,139,255,0)");
+
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, W, H);
+    }
+
     for (const p of particles) {
       p.x += p.vx * dt * 60;
       p.y += p.vy * dt * 60;
@@ -255,14 +307,18 @@
 
       if (p.life <= 0) continue;
 
-      const alpha = clamp(p.life / p.maxLife, 0, 1) * fade;
+      const alpha =
+        clamp(p.life / p.maxLife, 0, 1) * fade;
 
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = p.color;
       ctx.lineWidth = p.size;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
-      ctx.lineTo(p.x - p.vx * 4, p.y - p.vy * 4);
+      ctx.lineTo(
+        p.x - p.vx * 4,
+        p.y - p.vy * 4
+      );
       ctx.stroke();
 
       ctx.globalAlpha = alpha * 0.18;
@@ -273,10 +329,14 @@
     }
 
     for (let i = 0; i < 3; i++) {
-      const progress = clamp(elapsed / (0.8 + i * 0.3), 0, 1);
+      const progress = clamp(
+        elapsed / (0.8 + i * 0.3),
+        0,
+        1
+      );
 
       ctx.globalAlpha = (1 - progress) * 0.4 * fade;
-      ctx.strokeStyle = [COLORS.pink, COLORS.cyan, COLORS.purple][i];
+      ctx.strokeStyle = [C.pink, C.cyan, C.purple][i];
       ctx.lineWidth = 2 + (1 - progress) * 4;
 
       ctx.beginPath();
@@ -293,6 +353,41 @@
     ctx.restore();
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
+  }
+
+  function drawTransitionGlow(t) {
+    const p = smooth(9.4, 10.4, t);
+    if (p <= 0) return;
+
+    const pulse = 0.5 + 0.5 * Math.sin(t * 8);
+    const radius = mix(
+      25,
+      Math.max(W, H) * 0.65,
+      smooth(10, 11.2, t)
+    );
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    const glow = ctx.createRadialGradient(
+      W / 2, H / 2, 0,
+      W / 2, H / 2, radius
+    );
+
+    glow.addColorStop(
+      0,
+      `rgba(241,124,203,${0.16 * (1 - smooth(10.1, 11.4, t))})`
+    );
+    glow.addColorStop(
+      0.35,
+      `rgba(85,221,245,${0.08 * pulse * (1 - p * 0.5)})`
+    );
+    glow.addColorStop(1, "rgba(169,139,255,0)");
+
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.restore();
   }
 
   function drawLogo(t) {
@@ -312,23 +407,23 @@
     ctx.textBaseline = "middle";
     ctx.font = `bold ${size}px monospace`;
 
-    ctx.shadowColor = COLORS.pink;
+    ctx.shadowColor = C.pink;
     ctx.shadowBlur = 35;
-    ctx.fillStyle = COLORS.pink;
+    ctx.fillStyle = C.pink;
     ctx.fillText("DIVIZTY", 0, 0);
 
-    ctx.shadowColor = COLORS.cyan;
+    ctx.shadowColor = C.cyan;
     ctx.shadowBlur = 22;
-    ctx.fillStyle = COLORS.cyan;
+    ctx.fillStyle = C.cyan;
     ctx.fillText("DIVIZTY", 0, -2);
 
     ctx.shadowBlur = 0;
-    ctx.fillStyle = COLORS.white;
+    ctx.fillStyle = C.white;
     ctx.fillText("DIVIZTY", 0, -1);
 
     ctx.globalAlpha *= smooth(0.4, 0.85, progress);
     ctx.font = `${Math.max(9, size * 0.17)}px monospace`;
-    ctx.fillStyle = COLORS.white;
+    ctx.fillStyle = C.white;
     ctx.fillText("WELCOME TO THE FUTURE", 0, size * 0.8);
 
     ctx.restore();
@@ -348,17 +443,35 @@
     drawBackground(t);
 
     if (t < 10) {
+      const shakeIn = smooth(5.5, 6.8, t);
+      const shakeOut = 1 - smooth(7.6, 8.1, t);
+      const shakeStrength = shakeIn * shakeOut;
+
+      const pinkBlend = smooth(5.3, 5.9, t);
+      const pinkMode = pinkBlend > 0;
+
+      // Draw the globe once, with smooth positional shaking.
       drawEarth(
         earthAngle(t),
         t,
-        t >= 5.5 && t < 8,
-        t >= 5.5
+        shakeStrength > 0.01,
+        pinkMode
       );
     }
 
-    if (t >= 4 && t < 5.5) drawError(t);
-    if (t >= 10 && t < 13.2) drawExplosion(t, dt);
-    if (t >= 11.5) drawLogo(t);
+    if (t >= 4 && t < 5.5) {
+      drawError(t);
+    }
+
+    drawTransitionGlow(t);
+
+    if (t >= 10 && t < 13.2) {
+      drawExplosion(t, dt);
+    }
+
+    if (t >= 11.5) {
+      drawLogo(t);
+    }
 
     if (t >= 15) {
       running = false;
@@ -370,11 +483,14 @@
 
   function startAnimation() {
     cancelAnimationFrame(raf);
+
     particles = [];
     explosionStarted = false;
     lastFrame = 0;
+
     running = true;
     startTime = performance.now();
+
     raf = requestAnimationFrame(animate);
   }
 
