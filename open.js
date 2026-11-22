@@ -3,11 +3,17 @@
   "use strict";
 
   const canvas = document.getElementById("world");
-  const ctx = canvas?.getContext("2d");
   const playButton = document.getElementById("play");
 
-  if (!canvas || !ctx) {
-    console.error("DIVIZTY: Canvas unavailable");
+  if (!canvas || !playButton) {
+    console.error("DIVIZTY: ไม่พบ canvas หรือปุ่ม PLAY");
+    return;
+  }
+
+  const ctx = canvas.getContext("2d");
+
+  if (!ctx) {
+    console.error("DIVIZTY: ไม่สามารถสร้าง Canvas context ได้");
     return;
   }
 
@@ -24,437 +30,360 @@
   let W = 0;
   let H = 0;
   let DPR = 1;
-  let running = false;
+  let animationFrame = null;
   let startTime = 0;
-  let lastFrame = 0;
-  let raf = 0;
-  let particles = [];
-  let explosionStarted = false;
+  let playing = false;
 
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const mix = (a, b, t) => a + (b - a) * t;
-
-  function smooth(a, b, x) {
-    const v = clamp((x - a) / (b - a), 0, 1);
-    return v * v * (3 - 2 * v);
-  }
+  const TAU = Math.PI * 2;
 
   function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
     DPR = Math.min(window.devicePixelRatio || 1, 2);
-    W = Math.max(1, window.innerWidth);
-    H = Math.max(1, window.innerHeight);
 
-    canvas.width = Math.round(W * DPR);
-    canvas.height = Math.round(H * DPR);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
 
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    drawBackground();
   }
 
-  window.addEventListener("resize", resize);
-  resize();
-
-  function random(a, b) {
-    return Math.random() * (b - a) + a;
+  function smooth(a, b, t) {
+    const x = Math.max(0, Math.min(1, (t - a) / (b - a)));
+    return x * x * (3 - 2 * x);
   }
 
-  // Rotation gradually accelerates, then slows down smoothly.
-  function earthAngle(t) {
-    if (t <= 4) {
-      return 1.4 * t + 0.55 * t * t;
-    }
-
-    if (t <= 8) {
-      return 14.4 + 5.8 * (t - 4);
-    }
-
-    if (t <= 10) {
-      const u = (t - 8) / 2;
-      return 37.6 + 11.6 * (
-        u - u * u + (u * u * u) / 3
-      );
-    }
-
-    return 41.4666667;
+  function lerp(a, b, amount) {
+    return a + (b - a) * amount;
   }
 
-  function drawBackground(t) {
+  function drawBackground() {
     ctx.fillStyle = C.bg;
     ctx.fillRect(0, 0, W, H);
-
-    for (let i = 0; i < 90; i++) {
-      const x = (i * 127.7) % W;
-      const y = (i * 83.3) % H;
-
-      ctx.globalAlpha =
-        0.2 + Math.abs(Math.sin(t * 1.1 + i)) * 0.55;
-
-      ctx.fillStyle = C.white;
-      ctx.fillRect(x, y, 1.3, 1.3);
-    }
-
-    ctx.globalAlpha = 1;
   }
 
-  function drawEarth(angle, t, shaking, pinkMode) {
-    const radius = Math.max(
-      40,
-      Math.min(145, W * 0.18, H * 0.27)
-    );
+  function getRadius() {
+    return Math.min(W, H) * 0.245;
+  }
 
-    const shakeStrength = shaking ? 1 : 0;
-    const sx = Math.sin(t * 48) * 4 * shakeStrength;
-    const sy = Math.cos(t * 55) * 4 * shakeStrength;
+  // คำนวณความเร็วและมุมการหมุนของโลก
+  function earthAngle(t) {
+    if (t <= 4) {
+      return 0.8 * t + 0.225 * t * t;
+    }
 
-    const cx = W / 2 + sx;
-    const cy = H / 2 + sy;
+    const angleAtFour = 0.8 * 4 + 0.225 * 16;
 
-    const resolution = 23;
-    const step = radius / resolution;
-    const glyphs = " .:-=+*#%@";
+    if (t <= 8) {
+      return angleAtFour + 2.6 * (t - 4);
+    }
 
-    ctx.save();
-    ctx.translate(cx, cy);
+    const angleAtEight = angleAtFour + 2.6 * 4;
+    const elapsed = Math.min(t - 8, 2);
 
-    // Neon atmospheric halo
+    // ค่อย ๆ ลดความเร็วลงจนหยุดสนิท
+    return angleAtEight +
+      2.6 * (elapsed - elapsed * elapsed / 4);
+  }
+
+  // สร้างรูปทรงพื้นดินแบบ procedural
+  function landPattern(lat, lon) {
+    const a = Math.sin(lon * 2.7 + lat * 2.1);
+    const b = Math.cos(lon * 3.8 - lat * 3.2);
+    const c = Math.sin(lon * 5.1 + lat * 4.5);
+    const d = Math.cos(lon * 1.7 + lat * 5.3);
+
+    return a * 0.34 + b * 0.28 + c * 0.23 + d * 0.15;
+  }
+
+  function getLandColor(lat, lon) {
+    const pattern =
+      Math.sin(lon * 3.5 + lat * 4.2) +
+      Math.cos(lon * 5.1 - lat * 2.8);
+
+    if (pattern > 0.55) {
+      return C.green;
+    }
+
+    if (pattern < -0.55) {
+      return C.purple;
+    }
+
+    return C.cyan;
+  }
+
+  function drawEarth(angle, t, shakeStrength, pinkMode) {
+    const radius = getRadius();
+    const centerX = W / 2;
+    const centerY = H / 2;
+
+    // แรงสั่นค่อย ๆ เพิ่มและค่อย ๆ ลด
+    const shakeX =
+      Math.sin(t * 48) * 4.5 * shakeStrength;
+
+    const shakeY =
+      Math.cos(t * 55) * 4.5 * shakeStrength;
+
+    const cx = centerX + shakeX;
+    const cy = centerY + shakeY;
+
+    // แสงรอบโลก
     const halo = ctx.createRadialGradient(
-      0, 0, radius * 0.35,
-      0, 0, radius * 1.35
+      cx, cy, radius * 0.3,
+      cx, cy, radius * 1.5
     );
 
-    halo.addColorStop(
-      0,
-      pinkMode
-        ? "rgba(241,124,203,0.16)"
-        : "rgba(85,221,245,0.10)"
-    );
-    halo.addColorStop(0.65, "rgba(169,139,255,0.07)");
+    halo.addColorStop(0, "rgba(85,221,245,0.09)");
+    halo.addColorStop(0.55, "rgba(169,139,255,0.045)");
     halo.addColorStop(1, "rgba(5,6,9,0)");
 
     ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(0, 0, radius * 1.35, 0, Math.PI * 2);
+    ctx.arc(cx, cy, radius * 1.5, 0, TAU);
     ctx.fill();
 
-    ctx.font = `${step * 1.35}px monospace`;
+    // ขอบวงกลมของโลก
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, TAU);
+    ctx.strokeStyle = pinkMode
+      ? "rgba(241,124,203,0.75)"
+      : "rgba(85,221,245,0.55)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // จุด ASCII บนพื้นผิวโลก
+    const step = 0.105;
+    const glyphs = [" ", ".", ":", "-", "=", "+", "*", "#", "%", "@"];
+
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    ctx.font = `${Math.max(8, radius * 0.075)}px "Space Mono", monospace`;
 
-    for (let y = -resolution; y <= resolution; y++) {
-      for (let x = -resolution; x <= resolution; x++) {
-        const nx = x / resolution;
-        const ny = y / resolution;
-        const d = nx * nx + ny * ny;
+    for (let lat = -Math.PI / 2; lat <= Math.PI / 2; lat += step) {
+      for (let lon = -Math.PI; lon <= Math.PI; lon += step) {
+        const rotatedLon = lon + angle;
 
-        if (d > 1) continue;
+        const x3 = Math.cos(lat) * Math.sin(rotatedLon);
+        const y3 = Math.sin(lat);
+        const z3 = Math.cos(lat) * Math.cos(rotatedLon);
 
-        const z = Math.sqrt(1 - d);
-        const lon = Math.atan2(nx, z) + angle;
-        const lat = Math.asin(ny);
+        // แสดงเฉพาะด้านหน้าของโลก
+        if (z3 <= 0.015) continue;
 
-        const continent =
-          Math.sin(lon * 2.4 + lat * 3.1) +
-          Math.cos(lon * 4.1 - lat * 2.2) +
-          Math.sin(lon * 6.3 + lat * 5.2) * 0.5;
+        const x = cx + x3 * radius;
+        const y = cy - y3 * radius;
 
-        const land = continent > 0.45;
+        const distance = Math.sqrt(x3 * x3 + y3 * y3);
+        if (distance > 1) continue;
 
-        let color = land
-          ? (pinkMode ? C.green : "#72E69A")
-          : (pinkMode ? C.pink : C.cyan);
+        const pattern = landPattern(lat, lon);
+        const isLand = pattern > 0.18;
+
+        let color;
 
         if (pinkMode) {
-          const accent =
-            Math.sin(lon * 5.2 + lat * 4.3) +
-            Math.cos(lon * 3.7 - lat * 5.1);
-
-          if (z > 0.3 && accent > 1.65) color = C.cyan;
-          if (z > 0.35 && accent < -1.65) color = C.purple;
+          // มหาสมุทรสีชมพูตลอดช่วงสั่นและหลังสั่น
+          color = isLand
+            ? getLandColor(lat, lon)
+            : C.pink;
+        } else {
+          // สีเดิมก่อนเข้าสู่ช่วงสั่น
+          if (isLand) {
+            color = pattern > 0.48 ? C.green : C.cyan;
+          } else {
+            color = "#78CBEA";
+          }
         }
 
-        const brightness = clamp(
-          z * 0.75 + (land ? 0.25 : 0.1),
-          0,
-          1
+        const depthAlpha = 0.48 + z3 * 0.52;
+        const latitudeAlpha = 0.75 + Math.cos(lat) * 0.25;
+
+        ctx.globalAlpha = depthAlpha * latitudeAlpha;
+
+        const brightness = Math.floor(
+          3 + z3 * 6 + Math.abs(pattern) * 2
         );
 
-        const index = Math.floor(
-          brightness * (glyphs.length - 1)
+        const glyphIndex = Math.min(
+          glyphs.length - 1,
+          brightness
         );
 
-        ctx.globalAlpha = 0.45 + z * 0.55;
         ctx.fillStyle = color;
-        ctx.fillText(
-          glyphs[index],
-          x * step,
-          y * step
-        );
+        ctx.fillText(glyphs[glyphIndex], x, y);
       }
     }
 
-    ctx.restore();
     ctx.globalAlpha = 1;
+
+    // แสงวงแหวนบาง ๆ
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius + 4, 0, TAU);
+    ctx.strokeStyle = pinkMode
+      ? "rgba(241,124,203,0.18)"
+      : "rgba(85,221,245,0.15)";
+    ctx.lineWidth = 5;
+    ctx.stroke();
   }
 
   function drawError(t) {
-    const flicker =
-      0.75 + Math.abs(Math.sin(t * 20)) * 0.25;
+    const opacity =
+      smooth(4, 4.35, t) *
+      (1 - smooth(5.15, 5.5, t));
 
-    const offset = Math.sin(t * 38) * 6;
+    if (opacity <= 0) return;
 
     ctx.save();
-    ctx.translate(W / 2, H / 2);
-
-    for (let i = 0; i < 8; i++) {
-      ctx.globalAlpha = 0.12;
-      ctx.fillStyle = i % 2 ? C.red : "#FF657C";
-      ctx.fillRect(
-        -W / 2,
-        Math.sin(t * 15 + i * 2) * 65,
-        W,
-        3
-      );
-    }
-
-    ctx.globalAlpha = flicker;
-    ctx.strokeStyle = C.red;
-    ctx.lineWidth = 2;
-    ctx.shadowColor = C.red;
-    ctx.shadowBlur = 30;
-    ctx.strokeRect(-135, -43, 270, 86);
-
-    ctx.font = "bold 40px monospace";
+    ctx.globalAlpha = opacity;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = C.red;
-    ctx.shadowBlur = 35;
-    ctx.fillText("ERROR", offset, 0);
 
-    ctx.shadowBlur = 0;
-    ctx.font = "10px monospace";
-    ctx.fillStyle = C.white;
-    ctx.fillText("SYSTEM FAILURE // 0x0000", 0, 62);
+    ctx.font = `700 ${Math.max(17, Math.min(W * 0.045, 30))}px "Space Mono", monospace`;
+
+    ctx.shadowColor = C.red;
+    ctx.shadowBlur = 22;
+    ctx.fillStyle = C.red;
+
+    ctx.fillText("ERROR", W / 2, H / 2);
 
     ctx.restore();
-    ctx.globalAlpha = 1;
   }
 
-  function createExplosion() {
-    if (explosionStarted) return;
+  // เส้นระเบิด
+  function drawExplosion(t) {
+    const progress = Math.max(0, Math.min(1, (t - 10) / 3.2));
+    const fade = 1 - smooth(12.7, 13.2, t);
 
-    explosionStarted = true;
-    particles = [];
+    if (fade <= 0) return;
+
+    const cx = W / 2;
+    const cy = H / 2;
+    const maxRadius = Math.max(W, H) * 0.8;
 
     const colors = [
+      C.pink,
       C.cyan,
       C.green,
-      C.pink,
       C.purple,
       C.white
     ];
 
-    for (let i = 0; i < 200; i++) {
-      const a = random(0, Math.PI * 2);
-      const speed = random(1.5, 7);
-
-      particles.push({
-        x: W / 2 + Math.cos(a) * random(0, 20),
-        y: H / 2 + Math.sin(a) * random(0, 20),
-        vx: Math.cos(a) * speed,
-        vy: Math.sin(a) * speed,
-        life: random(2, 3.2),
-        maxLife: 3.2,
-        size: random(1, 3),
-        color: colors[Math.floor(random(0, colors.length))]
-      });
-    }
-  }
-
-  function drawExplosion(t, dt) {
-    createExplosion();
-
-    const elapsed = t - 10;
-    const fade = 1 - smooth(2.1, 3.2, elapsed);
-
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
 
-    // Central flash that fades into the streaks.
-    const flash = 1 - smooth(0, 0.65, elapsed);
-
-    if (flash > 0) {
-      const glow = ctx.createRadialGradient(
-        W / 2, H / 2, 0,
-        W / 2, H / 2, 180
-      );
-
-      glow.addColorStop(0, `rgba(255,255,255,${flash * 0.9})`);
-      glow.addColorStop(0.25, `rgba(241,124,203,${flash * 0.55})`);
-      glow.addColorStop(1, "rgba(169,139,255,0)");
-
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = glow;
-      ctx.fillRect(0, 0, W, H);
-    }
-
-    for (const p of particles) {
-      p.x += p.vx * dt * 60;
-      p.y += p.vy * dt * 60;
-      p.vx *= Math.pow(0.985, dt * 60);
-      p.vy *= Math.pow(0.985, dt * 60);
-      p.life -= dt;
-
-      if (p.life <= 0) continue;
-
-      const alpha =
-        clamp(p.life / p.maxLife, 0, 1) * fade;
-
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = p.color;
-      ctx.lineWidth = p.size;
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y);
-      ctx.lineTo(
-        p.x - p.vx * 4,
-        p.y - p.vy * 4
-      );
-      ctx.stroke();
-
-      ctx.globalAlpha = alpha * 0.18;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    for (let i = 0; i < 3; i++) {
-      const progress = clamp(
-        elapsed / (0.8 + i * 0.3),
-        0,
-        1
-      );
-
-      ctx.globalAlpha = (1 - progress) * 0.4 * fade;
-      ctx.strokeStyle = [C.pink, C.cyan, C.purple][i];
-      ctx.lineWidth = 2 + (1 - progress) * 4;
-
-      ctx.beginPath();
-      ctx.arc(
-        W / 2,
-        H / 2,
-        progress * (160 + i * 90),
-        0,
-        Math.PI * 2
-      );
-      ctx.stroke();
-    }
-
-    ctx.restore();
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
-  }
-
-  function drawTransitionGlow(t) {
-    const p = smooth(9.4, 10.4, t);
-    if (p <= 0) return;
-
-    const pulse = 0.5 + 0.5 * Math.sin(t * 8);
-    const radius = mix(
-      25,
-      Math.max(W, H) * 0.65,
-      smooth(10, 11.2, t)
-    );
-
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-
+    // วงแสงตรงกลาง
     const glow = ctx.createRadialGradient(
-      W / 2, H / 2, 0,
-      W / 2, H / 2, radius
+      cx, cy, 0,
+      cx, cy, maxRadius * 0.45
     );
 
-    glow.addColorStop(
-      0,
-      `rgba(241,124,203,${0.16 * (1 - smooth(10.1, 11.4, t))})`
-    );
-    glow.addColorStop(
-      0.35,
-      `rgba(85,221,245,${0.08 * pulse * (1 - p * 0.5)})`
-    );
-    glow.addColorStop(1, "rgba(169,139,255,0)");
+    glow.addColorStop(0, `rgba(241,124,203,${0.22 * fade})`);
+    glow.addColorStop(0.4, `rgba(85,221,245,${0.08 * fade})`);
+    glow.addColorStop(1, "rgba(5,6,9,0)");
 
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, W, H);
 
+    // เส้นระเบิดกระจายออกจากศูนย์กลาง
+    const count = 150;
+
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * TAU;
+      const variation =
+        Math.sin(i * 12.9898) * 0.5 + 0.5;
+
+      const start = radiusValue(i, variation) * progress;
+      const length =
+        (maxRadius * (0.12 + variation * 0.48)) * progress;
+
+      const end = start + length;
+
+      const x1 = cx + Math.cos(angle) * start;
+      const y1 = cy + Math.sin(angle) * start;
+      const x2 = cx + Math.cos(angle) * end;
+      const y2 = cy + Math.sin(angle) * end;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+
+      ctx.strokeStyle = colors[i % colors.length];
+      ctx.globalAlpha = fade * (0.3 + variation * 0.7);
+      ctx.lineWidth = 0.6 + variation * 1.5;
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
+  function radiusValue(i, variation) {
+    return variation * 20 + (i % 7) * 2;
+  }
+
+  // โลโก้ DIVIZTY ตอนจบ
   function drawLogo(t) {
-    const progress = clamp((t - 11.5) / 3.5, 0, 1);
-    const ease = 1 - Math.pow(1 - progress, 4);
-    const scale = 0.04 + ease * 0.96;
-    const alpha = smooth(0.02, 0.5, progress);
+    const opacity = smooth(11.5, 12.5, t);
+
+    if (opacity <= 0) return;
+
+    const scale = lerp(0.82, 1, smooth(11.5, 13, t));
 
     ctx.save();
     ctx.translate(W / 2, H / 2);
     ctx.scale(scale, scale);
-    ctx.globalAlpha = alpha;
-
-    const size = Math.min(76, W * 0.14);
 
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = `bold ${size}px monospace`;
 
-    ctx.shadowColor = C.pink;
+    const fontSize = Math.min(W * 0.12, 82);
+
+    // ชั้นแสงด้านหลัง
+    ctx.globalAlpha = opacity * 0.22;
+    ctx.font = `700 ${fontSize}px "Space Mono", monospace`;
+    ctx.fillStyle = C.cyan;
+    ctx.shadowColor = C.cyan;
     ctx.shadowBlur = 35;
-    ctx.fillStyle = C.pink;
     ctx.fillText("DIVIZTY", 0, 0);
 
-    ctx.shadowColor = C.cyan;
-    ctx.shadowBlur = 22;
-    ctx.fillStyle = C.cyan;
-    ctx.fillText("DIVIZTY", 0, -2);
+    // ชั้นสีม่วง
+    ctx.globalAlpha = opacity * 0.45;
+    ctx.fillStyle = C.purple;
+    ctx.shadowColor = C.purple;
+    ctx.shadowBlur = 20;
+    ctx.fillText("DIVIZTY", -2, -2);
 
-    ctx.shadowBlur = 0;
+    // ตัวอักษรหลัก
+    ctx.globalAlpha = opacity;
     ctx.fillStyle = C.white;
-    ctx.fillText("DIVIZTY", 0, -1);
-
-    ctx.globalAlpha *= smooth(0.4, 0.85, progress);
-    ctx.font = `${Math.max(9, size * 0.17)}px monospace`;
-    ctx.fillStyle = C.white;
-    ctx.fillText("WELCOME TO THE FUTURE", 0, size * 0.8);
+    ctx.shadowColor = C.pink;
+    ctx.shadowBlur = 18;
+    ctx.fillText("DIVIZTY", 0, 0);
 
     ctx.restore();
-    ctx.globalAlpha = 1;
   }
 
   function animate(now) {
-    if (!running) return;
+    if (!playing) return;
 
     const t = (now - startTime) / 1000;
-    const dt = lastFrame
-      ? Math.min((now - lastFrame) / 1000, 0.033)
-      : 1 / 60;
 
-    lastFrame = now;
-
-    drawBackground(t);
+    drawBackground();
 
     if (t < 10) {
       const shakeIn = smooth(5.5, 6.8, t);
       const shakeOut = 1 - smooth(7.6, 8.1, t);
       const shakeStrength = shakeIn * shakeOut;
 
-      const pinkBlend = smooth(5.3, 5.9, t);
-      const pinkMode = pinkBlend > 0;
+      // ตั้งแต่เริ่มสั่นจนถึงก่อนระเบิด โลกใช้สีชมพู
+      const pinkMode = t >= 5.5;
 
-      // Draw the globe once, with smooth positional shaking.
       drawEarth(
         earthAngle(t),
         t,
-        shakeStrength > 0.01,
+        shakeStrength,
         pinkMode
       );
     }
@@ -463,43 +392,41 @@
       drawError(t);
     }
 
-    drawTransitionGlow(t);
-
-    if (t >= 10 && t < 13.2) {
-      drawExplosion(t, dt);
+    if (t >= 10) {
+      drawExplosion(t);
     }
 
     if (t >= 11.5) {
       drawLogo(t);
     }
 
-    if (t >= 15) {
-      running = false;
-      return;
+    if (t < 15) {
+      animationFrame = requestAnimationFrame(animate);
+    } else {
+      playing = false;
+      cancelAnimationFrame(animationFrame);
+      playButton.style.display = "block";
     }
-
-    raf = requestAnimationFrame(animate);
   }
 
   function startAnimation() {
-    cancelAnimationFrame(raf);
+    if (playing) return;
 
-    particles = [];
-    explosionStarted = false;
-    lastFrame = 0;
-
-    running = true;
+    playing = true;
     startTime = performance.now();
 
-    raf = requestAnimationFrame(animate);
+    playButton.style.display = "none";
+
+    if (animationFrame) {
+      cancelAnimationFrame(animationFrame);
+    }
+
+    animationFrame = requestAnimationFrame(animate);
   }
 
-  if (playButton) {
-    playButton.addEventListener("click", () => {
-      playButton.style.display = "none";
-      startAnimation();
-    });
-  } else {
-    startAnimation();
-  }
+  playButton.addEventListener("click", startAnimation);
+
+  window.addEventListener("resize", resize);
+
+  resize();
 })();
